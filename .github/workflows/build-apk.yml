@@ -1,0 +1,76 @@
+
+name: Vokabeltrainer APK bauen
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "index.html"
+      - "sw.js"
+      - ".github/workflows/build-apk.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Projekt herunterladen
+        uses: actions/checkout@v4
+
+      - name: Java einrichten
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Android SDK einrichten
+        uses: android-actions/setup-android@v3
+
+      - name: Node.js einrichten
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Prüfen, ob die Web-App vorhanden ist
+        run: |
+          test -f index.html || {
+            echo "FEHLER: index.html fehlt im Hauptordner."
+            exit 1
+          }
+
+      - name: Android-Projekt vorbereiten
+        run: |
+          mkdir -p www
+          cp index.html www/index.html
+          if [ -f sw.js ]; then cp sw.js www/sw.js; fi
+
+          npm init -y
+          npm install @capacitor/core@6 @capacitor/android@6
+          npm install --save-dev @capacitor/cli@6
+
+          cat > capacitor.config.json <<'EOF'
+          {
+            "appId": "de.marlon.vokabeltrainer",
+            "appName": "Vokabeltrainer",
+            "webDir": "www"
+          }
+          EOF
+
+          npx cap add android
+          npx cap sync android
+
+      - name: APK bauen
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - name: APK zum Herunterladen bereitstellen
+        uses: actions/upload-artifact@v4
+        with:
+          name: vokabeltrainer-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
